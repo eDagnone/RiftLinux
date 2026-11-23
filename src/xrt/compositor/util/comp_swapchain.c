@@ -1,4 +1,5 @@
 // Copyright 2019-2023, Collabora, Ltd.
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -784,7 +785,8 @@ comp_swapchain_enable_steamvr_color_handoff(struct comp_swapchain *sc)
 		ret = vk_cmd_pool_end_submit_wait_and_free_cmd_buffer_locked(vk, pool, cmd);
 	}
 	vk_cmd_pool_unlock(pool);
-	if (ret == VK_SUCCESS)
+	if (ret == VK_SUCCESS) {
 		sc->steamvr_color_handoff = true;
+	}
 	return ret;
 }

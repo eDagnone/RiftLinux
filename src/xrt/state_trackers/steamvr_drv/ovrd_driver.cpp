@@ -1,6 +1,7 @@
 // Copyright 2020,2024 Collabora, Ltd.
 // Copyright 2026, NVIDIA CORPORATION.
 // SPDX-FileCopyrightText: 2026 Aditya Mehra <aix.m@outlook.com>
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -4119,7 +4120,6 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 	float direct_mode_deadline_s = 18.0f;
 	int render_scale = 100;
 	int direct_mode_capture = 0;
-	int direct_mode_capture_layer = 0;
 	float direct_mode_capture_delay_s = 20.0f;
 	int capture_output = 0;
 	int hdr_test = 0;
@@ -4158,10 +4158,6 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 			direct_mode_capture = cap->valueint;
 		}
 		const cJSON *capd = cJSON_GetObjectItemCaseSensitive(display, "direct_mode_capture_delay_s");
-		const cJSON *capl = cJSON_GetObjectItemCaseSensitive(display, "direct_mode_capture_layer");
-		if (cJSON_IsNumber(capl)) {
-			direct_mode_capture_layer = std::clamp(capl->valueint, 0, 15);
-		}
 		if (cJSON_IsNumber(capd)) {
 			direct_mode_capture_delay_s = (float)capd->valuedouble;
 		}
@@ -4479,7 +4475,6 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 			g_direct_mode->m_players_hdr.store(hdr_players);
 			g_direct_mode->m_capture_count = g_direct_mode->m_capture_left = direct_mode_capture;
 			g_direct_mode->m_capture_delay_s = direct_mode_capture_delay_s;
-			g_direct_mode->m_capture_layer = direct_mode_capture_layer;
 		} else {
 			ovrd_log("Direct mode: Monado's compositor took no client, SteamVR's compositor instead\n");
 			xrt_comp_native_destroy(&m_xcn);

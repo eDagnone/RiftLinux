@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Aditya Mehra <aix.m@outlook.com>
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -12,13 +13,13 @@
 #include "math/m_vec3.h"
 #include "os/os_time.h"
 #include "util/u_time.h"
+#include "util/u_debug.h"
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <linux/types.h>
 #include <sys/ioctl.h>
-#include <poll.h>
 #include <string>
 
 #include <algorithm>
@@ -111,39 +112,6 @@ struct Capture
 {
 	struct vk_bundle *vk = nullptr;
 	struct vk_cmd_pool pool = {};
-
-	// Diagnostic only: compare a layout transition that can eliminate fast clears with an
-	// otherwise identical shader-read barrier. This does not establish the producer's layout contract.
-	bool
-	import_barrier(struct xrt_swapchain *xsc, uint32_t index, bool from_color)
-	{
-		auto *sc = (struct comp_swapchain *)xsc;
-		if (vk == nullptr) {
-			if (vk_cmd_pool_init(sc->vk, &pool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT) != VK_SUCCESS) {
-				return false;
-			}
-			vk = sc->vk;
-		}
-		vk_cmd_pool_lock(&pool);
-		VkCommandBuffer cmd = VK_NULL_HANDLE;
-		VkResult result = vk_cmd_pool_create_and_begin_cmd_buffer_locked(vk, &pool, 0, &cmd);
-		if (result == VK_SUCCESS) {
-			VkImageMemoryBarrier barrier = {};
-			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			barrier.oldLayout = from_color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier.image = sc->vkic.images[index].handle;
-			barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-			vk->vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-			                         0, 0, nullptr, 0, nullptr, 1, &barrier);
-			result = vk_cmd_pool_end_submit_wait_and_free_cmd_buffer_locked(vk, &pool, cmd);
-		}
-		vk_cmd_pool_unlock(&pool);
-		return result == VK_SUCCESS;
-	}
 
 	//! Image @p index of @p xsc (Monado's swapchain of the set), every 4th pixel each way, bytes as stored.
 	bool
@@ -541,8 +509,9 @@ OvrdDirectMode::OvrdDirectMode(struct xrt_compositor_native *xcn,
     : m_xcn(xcn), m_head(head), m_driver_from_world(std::move(driver_from_world)), m_guard_ms(guard_ms),
       m_compositor_unorm(compositor_unorm), m_app_unorm(app_unorm)
 {
-	const char *handoff = getenv("RIFTLINUX_STEAMVR_HANDOFF");
-	m_handoff = handoff != nullptr && strcmp(handoff, "1") == 0;
+#ifdef XRT_HAVE_VULKAN
+	m_handoff = debug_get_bool_option("RIFTLINUX_STEAMVR_HANDOFF", false);
+#endif
 	// The log is per source file (ovrd_log.hpp): this one's too.
 	ovrd_log_init(vr::VRDriverLog());
 	ovrd_log("Direct mode: SteamVR's images go to Monado's compositor; its compositor's read as %s, the "
@@ -684,13 +653,6 @@ OvrdDirectMode::CreateSwapTextureSet(uint32_t unPid,
 		info.formats[1] = desc.nFormat;
 	}
 	info.sample_count = std::max(1u, desc.nSampleCount);
-	// Diagnostic: match SteamVR's explicit sRGB/UNORM view-format list.
-	if (getenv("RIFTLINUX_TEST_MATCH_FORMAT_LIST") != nullptr &&
-	    (desc.nFormat == 43 || desc.nFormat == 50)) {
-		info.format_count = 2;
-		info.formats[0] = desc.nFormat;
-		info.formats[1] = desc.nFormat == 43 ? 37 : 44;
-	}
 	info.width = desc.nWidth;
 	info.height = desc.nHeight;
 	info.face_count = 1;
@@ -700,21 +662,24 @@ OvrdDirectMode::CreateSwapTextureSet(uint32_t unPid,
 	for (int i = 0; i < 3; i++) {
 		copies[i] = fcntl(set->fds[i], F_DUPFD_CLOEXEC, 0);
 		if (copies[i] < 0) {
-			for (int j = 0; j < i; j++)
+			for (int j = 0; j < i; j++) {
 				close(copies[j]);
+			}
 			std::lock_guard<std::mutex> lock(m_lock);
 			destroy_set_locked(set.get());
 			return;
 		}
 	}
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 3; i++) {
 		set->fds[i] = copies[i];
+	}
 	const xrt_result_t xret = xrt_comp_import_swapchain(&m_xcn->base, &info, natives, 3, &set->xsc);
 	if (xret != XRT_SUCCESS) {
 		// Import may have consumed all handles before a later setup failure.
 		for (int i = 0; i < 3; i++) {
-			if (natives[i].handle >= 0)
+			if (natives[i].handle >= 0) {
 				close(natives[i].handle);
+			}
 		}
 		ovrd_log("Direct mode: Monado could not import the images (%d)\n", (int)xret);
 		std::lock_guard<std::mutex> lock(m_lock);
@@ -722,7 +687,7 @@ OvrdDirectMode::CreateSwapTextureSet(uint32_t unPid,
 		return;
 	}
 
-#ifdef RLN_CAPTURE
+#ifdef XRT_HAVE_VULKAN
 	if (set->is_compositor && m_handoff) {
 		auto *sc = (struct comp_swapchain *)set->xsc;
 		if (comp_swapchain_enable_steamvr_color_handoff(sc) != VK_SUCCESS) {
@@ -906,7 +871,7 @@ OvrdDirectMode::Present(vr::SharedTextureHandle_t syncTexture)
 			m_standby.store(false);
 		}
 		// The fences of every image this frame shows, both eyes, every layer (an image once): one sync file.
-		if ((m_fence || m_handoff) && (m_handoff || m_fences_work != 0)) {
+		if (m_handoff || (m_fence && m_fences_work != 0)) {
 			std::vector<int> fds;
 			for (const auto &layer : layers) {
 				for (const SubmitLayerPerEye_t &eye : layer) {
@@ -974,14 +939,14 @@ OvrdDirectMode::Present(vr::SharedTextureHandle_t syncTexture)
 	 */
 #ifdef RLN_CAPTURE
 	/*
-	 * display.direct_mode_capture: that many frames, one every half second once the selected layer appears,
+	 * display.direct_mode_capture: that many frames, one every half second once the application's images come,
 	 * each copied as SteamVR hands it over and again 10 ms later (are they finished?), into
 	 * ~/.cache/riftlinux/dm-capture, with their means in the log.
 	 */
-	if (m_capture_left > 0 && layers.size() > (size_t)m_capture_layer) {
+	if (m_capture_left > 0 && !layers.empty()) {
 		const int64_t t = os_monotonic_get_ns();
 		std::lock_guard<std::mutex> lock(m_lock);
-		auto it = m_handles.find(layers[m_capture_layer][0].hTexture);
+		auto it = m_handles.find(layers[0][0].hTexture);
 		if (it != m_handles.end() && m_capture_next_ns != 0 && t >= m_capture_next_ns) {
 			Set *set = it->second.first;
 			const uint32_t index = it->second.second;
@@ -991,18 +956,14 @@ OvrdDirectMode::Present(vr::SharedTextureHandle_t syncTexture)
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			const bool got_b = g_capture.grab(set->xsc, index, set->desc.nWidth, set->desc.nHeight, b, mb);
 			const int n = m_capture_count - m_capture_left;
-			const auto &eye = layers[m_capture_layer][0];
-			ovrd_log("Direct mode: capture layer %d of %zu, set %d, image %u, bounds %.3f %.3f %.3f %.3f\n",
-			         m_capture_layer, layers.size(), set->number, index, eye.bounds.uMin, eye.bounds.vMin,
-			         eye.bounds.uMax, eye.bounds.vMax);
 			char name[64];
 			if (got_a) {
-				snprintf(name, sizeof(name), "frame%02d-layer%d-%s-i%u-at-handover.rgba", n, m_capture_layer,
+				snprintf(name, sizeof(name), "frame%02d-%s-i%u-at-handover.rgba", n,
 				         set->is_compositor ? "compositor" : "app", index);
 				write_capture(a, set->desc.nWidth, set->desc.nHeight, name);
 			}
 			if (got_b) {
-				snprintf(name, sizeof(name), "frame%02d-layer%d-%s-i%u-10ms-later.rgba", n, m_capture_layer,
+				snprintf(name, sizeof(name), "frame%02d-%s-i%u-10ms-later.rgba", n,
 				         set->is_compositor ? "compositor" : "app", index);
 				write_capture(b, set->desc.nWidth, set->desc.nHeight, name);
 			}
@@ -1120,31 +1081,6 @@ OvrdDirectMode::submit_frame(std::vector<std::array<SubmitLayerPerEye_t, 2>> lay
 	frame.frame_id = frame_id;
 	frame.display_time_ns = display_time_ns;
 	frame.env_blend_mode = XRT_BLEND_MODE_OPAQUE;
-#ifdef RLN_CAPTURE
-	const char *barrier_probe = m_handoff ? nullptr : getenv("RIFTLINUX_TEST_IMPORT_BARRIER");
-	if (barrier_probe != nullptr && fence >= 0 && getenv("RIFTLINUX_TEST_RETAIN_FDS") != nullptr) {
-		struct pollfd pending = {fence, POLLIN, 0};
-		if (poll(&pending, 1, 5000) <= 0) {
-			ovrd_log("Direct mode: diagnostic producer fence wait failed\n");
-			barrier_probe = nullptr;
-		}
-	}
-	if (barrier_probe != nullptr) {
-		std::lock_guard<std::mutex> lock(m_lock);
-		std::vector<vr::SharedTextureHandle_t> seen;
-		for (const auto &layer : layers) {
-			for (const auto &eye : layer) {
-				if (std::find(seen.begin(), seen.end(), eye.hTexture) != seen.end()) continue;
-				seen.push_back(eye.hTexture);
-				auto it = m_handles.find(eye.hTexture);
-				if (it != m_handles.end() && !g_capture.import_barrier(it->second.first->xsc, it->second.second,
-				                                                     strcmp(barrier_probe, "color") == 0)) {
-					ovrd_log("Direct mode: diagnostic import barrier failed\n");
-				}
-			}
-		}
-	}
-#endif
 	xrt_comp_layer_begin(xc, &frame);
 
 	// The eyes relative to the head, and their fields of view, as the headset has them (SteamVR renders with

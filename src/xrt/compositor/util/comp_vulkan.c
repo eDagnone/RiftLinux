@@ -1,6 +1,7 @@
 // Copyright 2019-2023, Collabora, Ltd.
 // Copyright 2025-2026, NVIDIA CORPORATION.
 // SPDX-FileCopyrightText: 2026 Aditya Mehra <aix.m@outlook.com>
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -14,7 +15,6 @@
 
 #include "os/os_time.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "util/u_handles.h"
@@ -331,8 +331,7 @@ create_device(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_args)
 	};
 
 	// Fast-clear elimination of SteamVR colour attachments needs graphics capability.
-	const bool only_compute_queue = vk_args->only_compute_queue && !vk_args->require_graphics_queue &&
-	                                getenv("RIFTLINUX_TEST_GRAPHICS_QUEUE") == NULL;
+	const bool only_compute_queue = vk_args->only_compute_queue && !vk_args->require_graphics_queue;
 	int gpu_index = -1;
 
 	ret = resolve_selected_gpu_index(vk, vk_args, &gpu_index);

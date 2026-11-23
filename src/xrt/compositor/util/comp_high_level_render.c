@@ -1,5 +1,6 @@
 // Copyright 2019-2024, Collabora, Ltd.
 // Copyright 2024-2025, NVIDIA CORPORATION.
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -232,7 +233,8 @@ chl_frame_state_cs_set_target(struct chl_frame_state *frame_state,
 	}
 }
 
-/* SteamVR currently leaves its direct-mode compositor attachments in COLOR_ATTACHMENT_OPTIMAL.
+/*
+ * SteamVR currently leaves its direct-mode compositor attachments in COLOR_ATTACHMENT_OPTIMAL.
  * Keep this compatibility contract local to explicitly marked swapchains. This is not an
  * external queue-family ownership transfer: SteamVR supplies no matching release operation.
  * The producer dma-buf fence is waited by the multi compositor before publishing the frame.
@@ -251,20 +253,24 @@ chl_steamvr_color_handoff(struct vk_bundle *vk,
 	assert(layer_count <= XRT_MAX_LAYERS);
 	for (uint32_t l = 0; l < layer_count; l++) {
 		// The direct-mode adapter submits stereo projection layers exclusively.
-		if (layers[l].data.type != XRT_LAYER_PROJECTION)
+		if (layers[l].data.type != XRT_LAYER_PROJECTION) {
 			continue;
+		}
 		for (uint32_t eye = 0; eye < 2; eye++) {
-			struct comp_swapchain *sc = (struct comp_swapchain *)layers[l].sc_array[eye];
-			if (sc == NULL || !sc->steamvr_color_handoff)
+			struct comp_swapchain *sc = comp_swapchain(layers[l].sc_array[eye]);
+			if (sc == NULL || !sc->steamvr_color_handoff) {
 				continue;
+			}
 			uint32_t index = layers[l].data.proj.v[eye].sub.image_index;
 			assert(index < sc->vkic.image_count);
 			VkImage image = sc->vkic.images[index].handle;
 			bool seen = false;
-			for (uint32_t i = 0; i < count; i++)
+			for (uint32_t i = 0; i < count; i++) {
 				seen |= barriers[i].image == image;
-			if (seen)
+			}
+			if (seen) {
 				continue;
+			}
 			barriers[count++] = (VkImageMemoryBarrier){
 			    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 			    .srcAccessMask =

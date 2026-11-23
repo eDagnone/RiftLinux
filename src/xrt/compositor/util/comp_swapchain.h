@@ -1,4 +1,5 @@
 // Copyright 2019-2023, Collabora, Ltd.
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file

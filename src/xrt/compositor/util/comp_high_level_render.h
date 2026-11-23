@@ -1,5 +1,6 @@
 // Copyright 2019-2024, Collabora, Ltd.
 // Copyright 2024-2025, NVIDIA CORPORATION.
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -25,8 +26,10 @@ extern "C" {
 #endif
 
 
-// SteamVR's direct-mode adapter marks only its compositor-owned colour attachments.
-// These barriers are part of the frame command buffer, not extra submissions/waits.
+/*!
+ * Transition SteamVR compositor-owned attachments before or after sampling.
+ * Recorded in the frame command buffer to avoid additional submissions and waits.
+ */
 void
 chl_steamvr_color_handoff(struct vk_bundle *vk,
                           VkCommandBuffer cmd,

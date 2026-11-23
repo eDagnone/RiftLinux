@@ -1,6 +1,7 @@
 // Copyright 2019-2024, Collabora, Ltd.
 // Copyright 2025-2026, NVIDIA CORPORATION.
 // SPDX-FileCopyrightText: 2026 Aditya Mehra <aix.m@outlook.com>
+// SPDX-FileCopyrightText: 2026 Ethan Dagnone <ethandagnone@gmail.com>
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
