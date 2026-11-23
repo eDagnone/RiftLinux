@@ -25,6 +25,10 @@ extern "C" {
 #endif
 
 
+//! Identify RADV on the selected physical device, not merely an AMD GPU.
+bool
+comp_vulkan_is_radv(struct vk_bundle *vk);
+
 /*!
  * Arguments to Vulkan bundle initialisation, all args needs setting.
  */
@@ -54,8 +58,8 @@ struct comp_vulkan_arguments
 	//! Should we look for a queue with no graphics, only compute.
 	bool only_compute_queue;
 
-	//! Require graphics capability while preserving compute-renderer device features.
-	bool require_graphics_queue;
+	//! Enable the SteamVR colour handoff workaround when the selected driver is RADV.
+	bool steamvr_color_handoff;
 
 	//! Should we try to enable timeline semaphores if available
 	bool timeline_semaphore;

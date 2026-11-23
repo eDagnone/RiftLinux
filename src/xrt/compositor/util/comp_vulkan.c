@@ -313,6 +313,26 @@ create_instance(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_arg
 	return ret;
 }
 
+bool
+comp_vulkan_is_radv(struct vk_bundle *vk)
+{
+	VkPhysicalDeviceProperties properties;
+	vk->vkGetPhysicalDeviceProperties(vk->physical_device, &properties);
+	// Driver properties are core in Vulkan 1.2. Older drivers keep the existing path.
+	if (properties.apiVersion < VK_API_VERSION_1_2) {
+		return false;
+	}
+	VkPhysicalDeviceDriverProperties driver = {
+	    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+	};
+	VkPhysicalDeviceProperties2 properties2 = {
+	    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+	    .pNext = &driver,
+	};
+	vk->vkGetPhysicalDeviceProperties2(vk->physical_device, &properties2);
+	return driver.driverID == VK_DRIVER_ID_MESA_RADV;
+}
+
 static VkResult
 create_device(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_args)
 {
@@ -330,14 +350,21 @@ create_device(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_args)
 	    VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT,   // Default fallback.
 	};
 
-	// Fast-clear elimination of SteamVR colour attachments needs graphics capability.
-	const bool only_compute_queue = vk_args->only_compute_queue && !vk_args->require_graphics_queue;
 	int gpu_index = -1;
 
 	ret = resolve_selected_gpu_index(vk, vk_args, &gpu_index);
 	if (ret != VK_SUCCESS) {
 		return ret;
 	}
+
+	// Resolve the actual device before deciding whether RADV needs a graphics queue.
+	ret = vk_select_physical_device(vk, gpu_index);
+	if (ret != VK_SUCCESS) {
+		return ret;
+	}
+	gpu_index = vk->physical_device_index;
+	const bool handoff = vk_args->steamvr_color_handoff && comp_vulkan_is_radv(vk);
+	const bool only_compute_queue = vk_args->only_compute_queue && !handoff;
 
 	struct vk_device_features device_features = {
 	    .shader_image_gather_extended = true,

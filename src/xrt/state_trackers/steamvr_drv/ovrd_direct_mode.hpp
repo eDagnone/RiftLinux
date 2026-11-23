@@ -168,7 +168,7 @@ public:
 	 * compositor's own drawing only placeholder ones.
 	 */
 	bool m_fence = true;
-	bool m_handoff = false;
+	std::atomic<bool> m_handoff{false};
 	uint64_t m_missing_fences = 0;
 	//! Present only takes the frame, PostPresent hands it to Monado (display.direct_mode_present_split); false: both
 	//! in Present.

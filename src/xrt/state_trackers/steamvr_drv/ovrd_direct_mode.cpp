@@ -35,6 +35,7 @@
 #include "vk/vk_helpers.h"
 #include "vk/vk_cmd_pool.h"
 #include "util/comp_swapchain.h"
+#include "util/comp_vulkan.h"
 #include <sys/stat.h>
 #endif
 
@@ -509,9 +510,6 @@ OvrdDirectMode::OvrdDirectMode(struct xrt_compositor_native *xcn,
     : m_xcn(xcn), m_head(head), m_driver_from_world(std::move(driver_from_world)), m_guard_ms(guard_ms),
       m_compositor_unorm(compositor_unorm), m_app_unorm(app_unorm)
 {
-#ifdef XRT_HAVE_VULKAN
-	m_handoff = debug_get_bool_option("RIFTLINUX_STEAMVR_HANDOFF", false);
-#endif
 	// The log is per source file (ovrd_log.hpp): this one's too.
 	ovrd_log_init(vr::VRDriverLog());
 	ovrd_log("Direct mode: SteamVR's images go to Monado's compositor; its compositor's read as %s, the "
@@ -688,14 +686,18 @@ OvrdDirectMode::CreateSwapTextureSet(uint32_t unPid,
 	}
 
 #ifdef XRT_HAVE_VULKAN
-	if (set->is_compositor && m_handoff) {
-		auto *sc = (struct comp_swapchain *)set->xsc;
+	auto *sc = comp_swapchain(set->xsc);
+	if (set->is_compositor && debug_get_bool_option("RIFTLINUX_STEAMVR_HANDOFF", false) &&
+	    comp_vulkan_is_radv(sc->vk)) {
 		if (comp_swapchain_enable_steamvr_color_handoff(sc) != VK_SUCCESS) {
 			ovrd_log("Direct mode: cannot initialize colour handoff\n");
 			std::lock_guard<std::mutex> lock(m_lock);
 			destroy_set_locked(set.get());
 			return;
 		}
+		// Require producer fences only for the RADV metadata transitions. Other drivers
+		// retain existing optional-fence/timing-guard path unless verified in future.
+		m_handoff = true;
 		ovrd_log("Direct mode: set %d uses batched colour attachment handoff\n", set->number);
 	}
 #endif
