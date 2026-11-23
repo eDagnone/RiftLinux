@@ -53,6 +53,9 @@ struct comp_vulkan_arguments
 	//! Should we look for a queue with no graphics, only compute.
 	bool only_compute_queue;
 
+	//! Require graphics capability while preserving compute-renderer device features.
+	bool require_graphics_queue;
+
 	//! Should we try to enable timeline semaphores if available
 	bool timeline_semaphore;
 

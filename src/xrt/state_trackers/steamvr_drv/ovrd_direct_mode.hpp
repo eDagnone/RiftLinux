@@ -150,6 +150,7 @@ public:
 	//! Frames to copy out (display.direct_mode_capture), left to copy, when the next.
 	int m_capture_count = 0;
 	int m_capture_left = 0;
+	int m_capture_layer = 0; //!< Diagnostic layer index, 0 = scene, 1 = first overlay.
 	int64_t m_capture_next_ns = 0;
 	//! Seconds after the first frame before capturing (display.direct_mode_capture_delay_s).
 	float m_capture_delay_s = 20.0f;
@@ -167,6 +168,8 @@ public:
 	 * compositor's own drawing only placeholder ones.
 	 */
 	bool m_fence = true;
+	bool m_handoff = false;
+	uint64_t m_missing_fences = 0;
 	//! Present only takes the frame, PostPresent hands it to Monado (display.direct_mode_present_split); false: both
 	//! in Present.
 	bool m_present_split = true;

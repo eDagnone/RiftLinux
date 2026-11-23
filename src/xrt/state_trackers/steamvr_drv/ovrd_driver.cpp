@@ -4119,6 +4119,7 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 	float direct_mode_deadline_s = 18.0f;
 	int render_scale = 100;
 	int direct_mode_capture = 0;
+	int direct_mode_capture_layer = 0;
 	float direct_mode_capture_delay_s = 20.0f;
 	int capture_output = 0;
 	int hdr_test = 0;
@@ -4157,6 +4158,10 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 			direct_mode_capture = cap->valueint;
 		}
 		const cJSON *capd = cJSON_GetObjectItemCaseSensitive(display, "direct_mode_capture_delay_s");
+		const cJSON *capl = cJSON_GetObjectItemCaseSensitive(display, "direct_mode_capture_layer");
+		if (cJSON_IsNumber(capl)) {
+			direct_mode_capture_layer = std::clamp(capl->valueint, 0, 15);
+		}
 		if (cJSON_IsNumber(capd)) {
 			direct_mode_capture_delay_s = (float)capd->valuedouble;
 		}
@@ -4429,6 +4434,8 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 	xret = xrt_instance_create_system(m_xinst, &m_xsys, &m_xsysd, &m_xso, NULL);
 	ovrd_log("Devices up in %.1f s\n", (double)(os_monotonic_get_ns() - init_start_ns) / 1e9);
 	if (xret >= 0 && direct_mode && m_xsysd->static_roles.head != NULL) {
+		// Confined to this SteamVR process; native OpenXR keeps its normal queue selection.
+		setenv("RIFTLINUX_STEAMVR_HANDOFF", "1", 0);
 		m_xsysc = direct_mode_compositor_start(m_xsysd->static_roles.head, init_start_ns, direct_mode_deadline_s);
 		if (m_xsysc == NULL) {
 			direct_mode = false;
@@ -4472,6 +4479,7 @@ CServerDriver_Monado::Init(vr::IVRDriverContext *pDriverContext)
 			g_direct_mode->m_players_hdr.store(hdr_players);
 			g_direct_mode->m_capture_count = g_direct_mode->m_capture_left = direct_mode_capture;
 			g_direct_mode->m_capture_delay_s = direct_mode_capture_delay_s;
+			g_direct_mode->m_capture_layer = direct_mode_capture_layer;
 		} else {
 			ovrd_log("Direct mode: Monado's compositor took no client, SteamVR's compositor instead\n");
 			xrt_comp_native_destroy(&m_xcn);

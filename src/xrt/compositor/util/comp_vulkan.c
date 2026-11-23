@@ -14,6 +14,7 @@
 
 #include "os/os_time.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "util/u_handles.h"
@@ -329,7 +330,9 @@ create_device(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_args)
 	    VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT,   // Default fallback.
 	};
 
-	const bool only_compute_queue = vk_args->only_compute_queue;
+	// Fast-clear elimination of SteamVR colour attachments needs graphics capability.
+	const bool only_compute_queue = vk_args->only_compute_queue && !vk_args->require_graphics_queue &&
+	                                getenv("RIFTLINUX_TEST_GRAPHICS_QUEUE") == NULL;
 	int gpu_index = -1;
 
 	ret = resolve_selected_gpu_index(vk, vk_args, &gpu_index);
@@ -341,7 +344,7 @@ create_device(struct vk_bundle *vk, const struct comp_vulkan_arguments *vk_args)
 	    .shader_image_gather_extended = true,
 	    .shader_storage_image_write_without_format = true,
 	    .storage_buffer_8bit_access = true,
-	    .null_descriptor = only_compute_queue,
+	    .null_descriptor = vk_args->only_compute_queue,
 	    .timeline_semaphore = vk_args->timeline_semaphore,
 	    .synchronization_2 = true,
 	    .present_id = true,

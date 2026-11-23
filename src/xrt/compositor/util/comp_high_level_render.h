@@ -25,6 +25,16 @@ extern "C" {
 #endif
 
 
+// SteamVR's direct-mode adapter marks only its compositor-owned colour attachments.
+// These barriers are part of the frame command buffer, not extra submissions/waits.
+void
+chl_steamvr_color_handoff(struct vk_bundle *vk,
+                          VkCommandBuffer cmd,
+                          const struct comp_layer *layers,
+                          uint32_t layer_count,
+                          bool before_sampling);
+
+
 /*!
  * Encapsulates all the needed state to run the layer squasher and distortion
  * passes, state object needs to be kept alive until the GPU work finishes.
@@ -150,6 +160,7 @@ chl_frame_state_gfx_default_pipeline(struct chl_frame_state *frame_state,
 
 	// Start the compute pipeline.
 	render_gfx_begin(render);
+	chl_steamvr_color_handoff(render->r->vk, render->r->cmd, layers, layer_count, true);
 
 	// Build the command buffer.
 	comp_render_gfx_dispatch( //
@@ -159,6 +170,7 @@ chl_frame_state_gfx_default_pipeline(struct chl_frame_state *frame_state,
 	    &frame_state->data);  //
 
 	// Make the command buffer submittable.
+	chl_steamvr_color_handoff(render->r->vk, render->r->cmd, layers, layer_count, false);
 	render_gfx_end(render);
 }
 
@@ -233,6 +245,7 @@ chl_frame_state_cs_default_pipeline(struct chl_frame_state *frame_state,
 
 	// Start the compute pipeline.
 	render_compute_begin(render);
+	chl_steamvr_color_handoff(render->r->vk, render->r->cmd, layers, layer_count, true);
 
 	// Build the command buffer.
 	comp_render_cs_dispatch( //
@@ -242,6 +255,7 @@ chl_frame_state_cs_default_pipeline(struct chl_frame_state *frame_state,
 	    &frame_state->data); //
 
 	// Make the command buffer submittable.
+	chl_steamvr_color_handoff(render->r->vk, render->r->cmd, layers, layer_count, false);
 	render_compute_end(render);
 }
 
